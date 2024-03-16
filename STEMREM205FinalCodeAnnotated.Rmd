@@ -1,0 +1,615 @@
+---
+title: "STEMREM205 Final Project"
+date: "3/16/24"
+output: html_document
+---
+
+```{r}
+# Packages installed and opened
+library(Seurat)
+library(ggplot2)
+library(tidyverse)
+library(reticulate)
+library(CytoTRACE)
+library(tibble)
+library(Matrix)
+library(monocle3)
+library(dplyr)
+library(DOSE)
+library(ggplot2)
+library(ChIPseeker)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(ggrepel)
+library(org.Hs.eg.db)
+library(forcats)
+```
+
+#Creating UMAPs in Seurat
+```{r}
+# Fetal Week 9_1
+FetalW9_1.data <- Read10X(data.dir = "/Users/SamanthaTrescott/Desktop/Bioinformatics/fsw9/FCAImmP7316887/GRCh38")
+```
+
+```{r}
+#seurat pipeline
+FetalW9_1 <- CreateSeuratObject(counts = FetalW9_1.data,project = "FetalW9_1",
+                            min.cells = 3, min.features = 200)
+FetalW9_1$percent.mt <- PercentageFeatureSet(FetalW9_1, pattern = "^MT-")
+FetalW9_1 <- subset(FetalW9_1, subset = nFeature_RNA > 200 & percent.mt < 10)
+FetalW9_1 <- NormalizeData(FetalW9_1, verbose = FALSE)
+FetalW9_1 <- FindVariableFeatures(FetalW9_1, verbose = FALSE)
+FetalW9_1 <- ScaleData(FetalW9_1, verbose = FALSE)
+FetalW9_1 <- RunPCA(FetalW9_1, verbose = FALSE)
+ElbowPlot(FetalW9_1)
+```
+
+```{r}
+#Creating the UMAP 
+FetalW9_1 <- RunUMAP(FetalW9_1, dims = 1:20, verbose = FALSE)
+FetalW9_1 <- FindNeighbors(FetalW9_1, dims = 1:20, verbose = FALSE)
+```
+
+```{r}
+#Finding clusters
+FetalW9_1 <- FindClusters(FetalW9_1, resolution = 0.2, verbose = FALSE)
+DimPlot(FetalW9_1, reduction = "umap", label = TRUE, repel = TRUE)
+```
+
+```{r}
+saveRDS(FetalW9_1, file = "/Users/SamanthaTrescott/Desktop/Bioinformatics/FetalW9_1.rds")
+```
+
+```{r}
+# Fetal Week 9_2
+FetalW9_2.data <- Read10X(data.dir = "/Users/SamanthaTrescott/Desktop/Bioinformatics/fsw9/FCAImmP7316886/GRCh38")
+```
+
+```{r}
+#Seurat pipeline
+FetalW9_2 <- CreateSeuratObject(counts = FetalW9_2.data,project = "FetalW9_2",
+                                min.cells = 3, min.features = 200)
+FetalW9_2$percent.mt <- PercentageFeatureSet(FetalW9_2, pattern = "^MT-")
+FetalW9_2 <- subset(FetalW9_2, subset = nFeature_RNA > 200 & percent.mt < 10)
+FetalW9_2 <- NormalizeData(FetalW9_2, verbose = FALSE)
+FetalW9_2 <- FindVariableFeatures(FetalW9_2, verbose = FALSE)
+FetalW9_2 <- ScaleData(FetalW9_2, verbose = FALSE)
+FetalW9_2 <- RunPCA(FetalW9_2, verbose = FALSE)
+ElbowPlot(FetalW9_2) # Include 20 PCs
+```
+
+```{r}
+#Creating the UMAP
+FetalW9_2 <- RunUMAP(FetalW9_2, dims = 1:20, verbose = FALSE)
+FetalW9_2 <- FindNeighbors(FetalW9_2, dims = 1:20, verbose = FALSE)
+```
+
+```{r}
+#Finding clusters
+FetalW9_2 <- FindClusters(FetalW9_2, resolution = 0.2, verbose = FALSE)
+DimPlot(FetalW9_2, reduction = "umap", label = TRUE, repel = TRUE)
+```
+
+```{r}
+saveRDS(FetalW9_2, file = "/Users/SamanthaTrescott/Desktop/Bioinformatics/FetalW9_2.rds")
+```
+
+```{r}
+# Load data
+FetalW9_1 <- readRDS("/Users/SamanthaTrescott/Desktop/Bioinformatics/FetalW9_1.rds")
+FetalW9_2 <- readRDS("/Users/SamanthaTrescott/Desktop/Bioinformatics/FetalW9_2.rds")
+
+ncol(FetalW9_1) # 4366
+ncol(FetalW9_2) # 4299
+```
+
+```{r}
+# Downsampling 
+set.seed(0)
+FetalW9_1 <- FetalW9_1[, sample(colnames(FetalW9_1), size=2000, replace=F)]
+FetalW9_2 <- FetalW9_2[, sample(colnames(FetalW9_2), size=2000, replace=F)]
+ncol(FetalW9_1) # 2000
+ncol(FetalW9_2) # 2000
+```
+
+```{r}
+# Find common variable features and find cell anchors
+FetalW9_objlist <- list(FetalW9_1, FetalW9_2)
+FetalW9_features <- SelectIntegrationFeatures(object.list = FetalW9_objlist)
+FetalW9_anchors <- FindIntegrationAnchors(object.list = FetalW9_objlist, anchor.features = FetalW9_features)
+FetalW9_anchors
+```
+
+```{r}
+# Integrate Fetal Week 9
+FetalW9_int <- IntegrateData(anchorset = FetalW9_anchors)
+DefaultAssay(FetalW9_int) <- "integrated"
+```
+
+```{r}
+saveRDS(FetalW9_int, file = "/Users/SamanthaTrescott/Desktop/Bioinformatics/FetalW9_integrated.rds")
+```
+
+```{r}
+FetalW9_int <- readRDS("/Users/SamanthaTrescott/Desktop/Bioinformatics/FetalW9_integrated.rds")
+```
+
+```{r}
+# Visualization and QC
+FetalW9_int <- ScaleData(FetalW9_int, verbose = FALSE)
+FetalW9_int <- RunPCA(FetalW9_int, npcs = 50, verbose = FALSE)
+ElbowPlot(FetalW9_int) # Include 20 PCs
+```
+
+```{r}
+FetalW9_int <- RunUMAP(FetalW9_int, dims = 1:9, verbose = FALSE)
+FetalW9_int <- FindNeighbors(FetalW9_int, dims = 1:9, verbose = FALSE)
+```
+
+```{r}
+FetalW9_int <- FindClusters(FetalW9_int, resolution = 0.18, verbose = FALSE)
+DimPlot(FetalW9_int, reduction = "umap", label = TRUE, repel = TRUE)
+```
+
+
+```{r}
+# Make panels for different fetal skin cell types
+# mac1_panel <- c('CD163','C1QB','FCGR2A')
+# mac2_panel <- c('FCGR2A','MS4A6A')
+# mono_mac_panel <- c('CD14','IL1B')
+mac_panel <- c('CD68','F13A1','CD163')
+# plasma_cell_panel <- c('CD79A','JCHAIN','IL7R')
+# th_panel <- c('CD3D','CD6','CD40LG','PTGER4','IL7R') # T helper cell
+# treg_panel <- c('CD3D','CD5','BATF','TIGIT','CTLA4') # regulatory T cell
+# tc_panel <- c('CD3D','CD8A','CD8B') # cytotoxic T cell
+# mast_cell_panel <- c('TPSB2','TPSAB1')
+ilc_panel <- c('KLRB1','TNFRSF25','IL7R','KIT','RORC') # innate lymphoid cell
+nk_panel <-c('CD3D','KLRB1','FCER1G','KLRC1','KLRD1','NKG7','GZMA','GZMH','GZMK','GZMM')
+kc_panel <- c('KRT15','STMN1','KRT8','KRT18','KRT19') # keratinocyte
+melanocyte_panel <- c('PMEL','DCT','MLANA','MITF','TYRP1')
+schwann_cell_panel <- c('NGFR','SOX10')
+fibroblast_panel <- c('COL1A1','COL1A2','COL6A1','CXCL12')
+pericyte_panel <- c('PDGFRB','KCNJ8')
+ve_panel <- c('CCND1','PECAM1','PRCP') # vascular endothelium
+le_panel <- c('LYVE1','SNCG') # lymphatic endothelium
+dc_panel <- c('KLF4','CLEC10A') # dermal DC11c+ dendritic cells
+lc_panel <- c('C1QB','C1QC','FCGR2A','NR4A1','NR4A2') # langerhans cell
+```
+
+```{r}
+VlnPlot(FetalW9_int, features = mac_panel, assay = "RNA") #2,3,4
+VlnPlot(FetalW9_int, features = ilc_panel, assay = "RNA") #8
+VlnPlot(FetalW9_int, features = nk_panel, assay = "RNA") #7
+VlnPlot(FetalW9_int, features = kc_panel, assay = "RNA") #10,11
+VlnPlot(FetalW9_int, features = melanocyte_panel, assay = "RNA")
+VlnPlot(FetalW9_int, features = schwann_cell_panel, assay = "RNA") 
+VlnPlot(FetalW9_int, features = fibroblast_panel, assay = "RNA") #0,1,4,5
+VlnPlot(FetalW9_int, features = pericyte_panel, assay = "RNA") #1,4
+VlnPlot(FetalW9_int, features = ve_panel, assay = "RNA")  #9,10
+VlnPlot(FetalW9_int, features = le_panel, assay = "RNA")#3
+VlnPlot(FetalW9_int, features = dc_panel, assay = "RNA") #
+VlnPlot(FetalW9_int, features = lc_panel, assay = "RNA") #
+```
+
+```{r}
+# 0: fibroblast 
+# 1: fibroblast
+# 2: macrophages
+# 3: lymphatic endothelium
+# 4: pericytes
+# 5: keratinocytes
+# 6: NK cells
+# 7: innate lymphoid cells
+# 8: dermal dendritic cells
+# 9:langerhans cells
+# 10: vascular endothelium
+
+fetal_marker_genes <- c('CD68','F13A1','CD163','KLRB1','TNFRSF25','IL7R','KIT',
+                        'RORC','CD3D','FCER1G','KLRC1','KLRD1','NKG7','GZMA',
+                        'GZMH','GZMK','GZMM','KRT15','STMN1','KRT8','KRT18',
+                        'KRT19','PMEL','DCT','MLANA','MITF','TYRP1','NGFR',
+                        'SOX10','COL1A1','COL1A2','COL6A1','CXCL12','PDGFRB',
+                        'KCNJ8','CCND1','PECAM1','PRCP','LYVE1','SNCG','KLF4',
+                        'CLEC9A','CLEC10A','C1QB','C1QC','FCGR2A','NR4A1','NR4A2')
+FetalW9_P <- DotPlot(FetalW9_int, features = fetal_marker_genes, assay = "RNA")
+FetalW9_P + theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+# 0: fibroblast 
+# 1: fibroblast
+# 2: macrophages
+# 3: lymphatic endothelium
+# 4: pericytes
+# 5: keratinocytes
+# 6: NK cells
+# 7: innate lymphoid cells
+# 8: dermal dendritic cells
+# 9:langerhans cells
+# 10: vascular endothelium
+new.FetalW9.cluster.ids <- c("Fibroblast_1","Fibroblast_2","Macrophages",
+                             "Lymphatic endothelium","Pericytes",
+                             "Keratinocytes","NK cells","Innate lymphoid cells", "Dermal dendritic cells", "Langerhans Cells", "Vascular endothelium")
+names(new.FetalW9.cluster.ids) <- levels(FetalW9_int)
+FetalW9_int <- RenameIdents(FetalW9_int, new.FetalW9.cluster.ids)
+DimPlot(FetalW9_int, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
+
+View(FetalW9_int)
+```
+
+```{r}
+saveRDS(FetalW9_int, file = "/Users/SamanthaTrescott/Desktop/Bioinformatics/FetalW9_int_annotated.rds")
+```
+
+```{r}
+readRDS(file = "/Users/SamanthaTrescott/Desktop/Bioinformatics/FetalW9_int_annotated.rds")
+```
+
+```{r}
+# Subset macrophages from Fetal Week 9 data
+FetalW9_mac <- subset(FetalW9_int, seurat_clusters == 2)
+DimPlot(FetalW9_mac, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
+```
+
+```{r}
+saveRDS(FetalW9_mac, file = "/Users/SamanthaTrescott/Desktop/Bioinformatics/FetalW9_mac_notannotated.rds")
+```
+
+```{r}
+readRDS(file = "/Users/SamanthaTrescott/Desktop/Bioinformatics/FetalW9_mac_notannotated.rds")
+```
+
+```{r}
+#Find subclusters from macrophage subset
+FetalW9_mac <- FindNeighbors(FetalW9_mac, dims = 1:15)
+FetalW9_mac <- FindClusters(FetalW9_mac, resolution = 0.2)
+```
+
+```{r}
+DimPlot(FetalW9_mac, reduction = "umap", label = TRUE, repel = TRUE)
+```
+
+```{r}
+# Make panels for different macrophages - chosen from Wang et al. proportion figure
+PrePraM <- c('RNASE1', 'F13A1') #proangiogenic macrophages
+PraM <- c('IL1B', 'CD83', 'CXCL8', 'C5AR1') #pre-proangiogenic macrophages
+ysdm<- c('STMN1', 'AGR2', 'MRC1')
+```
+
+```{r}
+VlnPlot(FetalW9_mac, features = PrePraM, assay = "RNA") #3,4
+VlnPlot(FetalW9_mac, features = PraM, assay = "RNA") #1,2
+VlnPlot(FetalW9_mac, features = ysdm, assay = "RNA") # 0 
+```
+
+```{r}
+FeaturePlot(FetalW9_mac, reduction = "umap", features = PrePraM)
+FeaturePlot(FetalW9_mac, reduction = "umap", features = PraM)
+FeaturePlot(FetalW9_mac, reduction = "umap", features = ysdm)
+```
+
+```{r}
+#3 and 4 are pre-proangiogenic macropahes
+#1,2 are proangiogenic macrophages
+#0 is yolk sac derived macrophage
+
+# 0: yolk sac derived macrophage 
+# 1: proangiogenic macrophage
+# 2: proangiogenic macrophage
+# 3: pre-proangiogenic
+# 4: pre-proangiogenic
+
+new.FetalW9mac.cluster.ids <- c("YS-derived macrophage progenitors","PraM","PraM",
+                             "PrePraM","PrePraM")
+names(new.FetalW9mac.cluster.ids) <- levels(FetalW9_mac)
+FetalW9_mac <- RenameIdents(FetalW9_mac, new.FetalW9mac.cluster.ids)
+DimPlot(FetalW9_mac, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
+
+View(FetalW9_mac)
+
+```
+
+```{r}
+saveRDS(FetalW9_mac, file = "/Users/SamanthaTrescott/Desktop/Bioinformatics/FetalW9_mac.rds")
+```
+
+#Calculating and plotting the proportions of each of the macrophage subclusters 
+```{r}
+# Proportion plot
+
+# Making a table containing the proportion of each macrophage subtype
+prop_table_W7 <- prop.table(table(FetalW7_mac@active.ident))
+prop_table_W7 <- as.data.frame(prop_table_W7) # Save as a dataframe
+prop_table_W7$Week <- "7" # Adding a column with the PCW number as a character
+
+prop_table_W8 <- prop.table(table(FetalW8_mac@active.ident))
+prop_table_W8 <- as.data.frame(prop_table_W8)
+prop_table_W8$Week <- "8"
+
+FetalW9_mac <- readRDS("/Users/wujiayi/Desktop/STEMREM205/Final_Project/FetalW9_mac.rds")
+prop_table_W9 <- prop.table(table(FetalW9_mac@active.ident))
+prop_table_W9 <- as.data.frame(prop_table_W9)
+prop_table_W9$Week <- "9"
+
+FetalW10_mac <- readRDS("/Users/wujiayi/Desktop/STEMREM205/Final_Project/FetalW10_withMac.rds")
+prop_table_W10 <- prop.table(table(FetalW10_mac@active.ident))
+prop_table_W10 <- as.data.frame(prop_table_W10)
+prop_table_W10$Week <- "10"
+
+# Combining the dataframes for each PCW into one
+prop_table_combined <- rbind(prop_table_W7, prop_table_W8, prop_table_W9, prop_table_W10)
+prop_table_combined$Freq <- round(prop_table_combined$Freq, digits = 4) # Keep four digits after the decimal point
+prop_table_combined$Freq <- prop_table_combined$Freq * 100 # Adding a new column to convert the proportions into percentage 
+prop_table_combined$Week <- factor(prop_table_combined$Week, levels = c("7","8","9","10")) # Assigning an order for the PCW #'s and saving them as factors
+# Making a stacked bar plot
+ggplot(prop_table_combined, aes(x = Week, y = Freq, fill = Var1)) +
+  geom_bar(stat = "identity") +
+  scale_fill_brewer(palette="Paired") +
+  geom_text(aes(label = Freq), position = position_stack(vjust = 0.5)) +
+  labs(x = "Post-conception weeks (PCW)",
+       y = "Proportion (%)",
+       fill = "Cell Type") +
+  ggtitle("Proportion of macrophage subtypes from PCW7 to PCW10") +
+  theme_minimal()
+```
+
+
+#Differential Gene Expression 
+```{r}
+FetalW9intan <- readRDS(file = "/Users/SamanthaTrescott/Desktop/Bioinformatics/FetalW9_int_annotated.rds")
+
+W9markers <- FindMarkers(object=FetalW9intan, ident.1 = "Macrophages")
+head(x = W9markers)
+```
+
+```{r}
+#Barplots for DEGs
+W09_markers_subset = subset(W09_markers, select = -c(pct.1, pct.2, p_val_adj))
+colnames(W09_markers_subset) <- c('pval','log2FoldChange')
+
+# Function to sort and filter W09_markers_subset
+g <- function(df) {
+  df_sorted <- df %>% arrange(desc(log2FoldChange))
+  top_positive <- df_sorted %>% head(10)
+  top_negative <- df_sorted %>% tail(10)
+  result <- rbind(top_positive, top_negative)
+  return(result)
+}
+
+result <- g(W09_markers_subset)
+#makes a new rowname column
+rownames_to_column(result, var = "rowname")
+#make a new gene column
+result = result %>% rownames_to_column("gene")
+
+
+# Mutate the dataframe 'result', reorder the rows based on log2FoldChange values for correct visualization
+result %>%
+  mutate(gene = fct_reorder(gene, log2FoldChange)) %>%
+  ggplot(aes(x=gene, y=log2FoldChange)) +
+  geom_bar(stat = "identity", aes(fill = ifelse(rank(log2FoldChange) <= 10, "blue", "red"))) +
+  coord_flip() + 
+  theme_bw() +
+  scale_fill_identity(name = "Top 10 vs Bottom 10") +
+  labs(title = "Week 9 DEGs",
+       x = "Genes",
+       y = "Log2 Fold Change")
+```
+
+```{r}
+#GO Terms
+W09_markers <- readRDS("/Users/SamanthaTrescott/Desktop/Bioinformatics/W9markers.rds")
+#remove unwanted columns
+W09_markers_corrected <- subset(W09_markers, select = -c(pct.1, pct.2, p_val_adj))
+#rename columns
+colnames(W09_markers_corrected) <- c('pval','log2FoldChange')
+
+#define fc threshold
+FC <- 0.25
+
+#extract genes with p-value < 0.01 and log2 fold change > FC
+W09_genelist = W09_markers_corrected[(W09_markers_corrected$pval<0.01 & W09_markers_corrected$log2FoldChange>FC),]$log2FoldChange
+
+#assign gene names as row names 
+names(W09_genelist) = as.character(rownames(W09_markers_corrected[(W09_markers_corrected$pval<0.01 &W09_markers_corrected$log2FoldChange>FC),]))
+
+#sort
+W09_genelist = sort(W09_genelist, decreasing = TRUE)
+
+#perform gene ontology (GO) enrichment analysis for the upregulated genes
+Goterms_upgenes_W09 <- enrichGO(names(W09_genelist),OrgDb = org.Hs.eg.db, ont ="BP",keyType="SYMBOL")
+
+#map gene symbols to ENTREZIDs using bitr
+Goterms_upgenes_W09 = bitr(names(Goterms_upgenes_W09), fromType="SYMBOL", toType="ENTREZID",OrgDb="org.Hs.eg.db")
+
+#make a function to perform the bitr operation
+perform_bitr <- function(genelist) {
+  bitr(names(genelist), fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Hs.eg.db")
+}
+
+#create a list of gene lists for different weeks
+gene_lists <- list(W7 = W07_genelist, W8 = W08_genelist, W9 = W09_genelist, W10 = W10_genelist)
+
+#use the perform_bitr function to each gene list in gene_lists 
+result_list <- lapply(gene_lists, perform_bitr)
+
+head(result_list$W7)
+
+#dotplot of the GO terms for upregulated genes at week 9
+dotplot(Goterms_upgenes_W09) + labs(title = "Goterms Upregulated - W9")
+```
+
+#CytoTRACE
+```{r}
+py_install("scanorama", method = "virtualenv",
+           pip = paste("--target=", "/Users/wujiayi/.virtualenvs/r-reticulate/bin/python", sep = ""),
+           envname = "r-reticulate")
+py_install("numpy", method = "virtualenv",
+           pip = paste("--target=", "/Users/wujiayi/.virtualenvs/r-reticulate/bin/python", sep = ""),
+           envname = "r-reticulate")
+scanorama <- import("scanorama")
+numpy <- import("numpy")
+
+if (!require("BiocManager", quietly = TRUE))
+   install.packages("BiocManager")
+BiocManager::install(version = "3.18")
+BiocManager::install(c('BiocGenerics', 'DelayedArray', 'DelayedMatrixStats',
+                       'limma', 'lme4', 'S4Vectors', 'SingleCellExperiment',
+                       'SummarizedExperiment', 'batchelor', 'HDF5Array',
+                       'terra', 'ggrastr'))
+BiocManager::install("sva", force = TRUE)
+
+install.packages("devtools")
+devtools::install_local("/Users/wujiayi/Desktop/STEMREM205/Final_Project/CytoTRACE_0.3.3.tar.gz")
+devtools::install_github('cole-trapnell-lab/monocle3', force = TRUE)
+
+install.packages("Matrix", dependencies = TRUE)
+```
+
+```{r}
+#merge layers of the FetalW9_mac object
+merged = JoinLayers(FetalW9_mac[["RNA"]]) 
+
+#extract the RNA assay data from the merged object
+FW9_expmat <- GetAssayData(merged, assay = "RNA", layer = "counts")
+#convert to a matrix
+FW9_expmat <- as.matrix(FW9_expmat)
+
+#perform CytoTRACE analysis 
+FW9_Cyto <- CytoTRACE(FW9_expmat)
+
+#plot cytogenes
+plotCytoTRACE(FW9_Cyto, gene = "NPC2")
+W9cytogenes <- plotCytoGenes(FW9_Cyto, numOfGenes = 10)
+W9cytogenes
+```
+
+```{r}
+#add CytoTRACE scores as metadata 
+FetalW9_mac_new <- AddMetaData(FetalW9_mac, metadata = FW9_Cyto, col.name = "CytoTRACE")
+
+#extract UMAP coordinates and convert to dataframe
+FetalW9_mac_umap_coords <- as.data.frame(FetalW9_mac_new@reductions$umap@cell.embeddings)
+colnames(FetalW9_mac_umap_coords) <- c("UMAP1", "UMAP2")
+
+#extract CytoTRACE scores
+FetalW9_mac_cytoTRACE_scores <- FetalW9_mac_new@meta.data$CytoTRACE
+
+#combine UMAP coordinates and CytoTRACE scores into a single dataframe
+FetalW9_mac_umap_data <- cbind(FetalW9_mac_umap_coords, CytoTRACE = FetalW9_mac_cytoTRACE_scores)
+
+#plot
+ggplot(FetalW9_mac_umap_data, aes(x = UMAP1, y = UMAP2, color = CytoTRACE)) +
+  geom_point(size = 0.5) +
+  scale_color_gradient(name = "Predicted order", low = "blue", high = "red", labels = labels) +
+  ggtitle("Week 9 macrophages") +
+  theme_minimal()
+```
+
+```{r}
+#Differentiation status by PCW plot
+
+# PCW 7 all cells
+FetalW7_1_expr <- GetAssayData(FetalW7_1, assay = "RNA", layer = "counts")
+FetalW7_1_expr <- as.matrix(FetalW7_1_expr)
+FetalW7_2_expr <- GetAssayData(FetalW7_2, assay = "RNA", layer = "counts")
+FetalW7_2_expr <- as.matrix(FetalW7_2_expr)
+FetalW7_list <- list(FetalW7_1_expr, FetalW7_2_expr)
+FetalW7_CytoTRACE <- iCytoTRACE(FetalW7_list)
+
+# PCW 7 macrophages
+FetalW7_mac_merged = JoinLayers(FetalW7_mac[["RNA"]])
+FetalW7_mac_expr <- GetAssayData(FetalW7_mac_merged, assay = "RNA", layer = "counts")
+FetalW7_mac_expr <- as.matrix(FetalW7_mac_expr)
+FetalW7_mac_CytoTRACE <- CytoTRACE(FetalW7_mac_expr)
+```
+
+```{r}
+# Calculate CytoTRACE scores for all macrophages
+Fetal_mac_expr_list <- list(FetalW7_mac_expr, FetalW8_mac_expr,
+                            FetalW9_mac_expr, FetalW10_mac_expr)
+Fetal_mac_CytoTRACE <- iCytoTRACE(Fetal_mac_expr_list)
+
+# Generating a phenotype table with PCW # assigned to each cytoTRACE score
+FetalW7_mac_phe <- t(FetalW7_mac_expr)
+FetalW7_mac_phe <- as.data.frame(FetalW7_mac_phe)
+FetalW7_mac_phe <- rownames_to_column(FetalW7_mac_phe)
+FetalW7_mac_phe <- FetalW7_mac_phe[,1:2]
+FetalW7_mac_phe[,2] <- "7"
+colnames(FetalW7_mac_phe) <- c("ID", "Week")
+
+FetalW8_mac_phe <- t(FetalW8_mac_expr)
+FetalW8_mac_phe <- as.data.frame(FetalW8_mac_phe)
+FetalW8_mac_phe <- rownames_to_column(FetalW8_mac_phe)
+FetalW8_mac_phe <- FetalW8_mac_phe[,1:2]
+FetalW8_mac_phe[,2] <- "8"
+colnames(FetalW8_mac_phe) <- c("ID", "Week")
+
+FetalW9_mac_phe <- t(FetalW9_mac_expr)
+FetalW9_mac_phe <- as.data.frame(FetalW9_mac_phe)
+FetalW9_mac_phe <- rownames_to_column(FetalW9_mac_phe)
+FetalW9_mac_phe <- FetalW9_mac_phe[,1:2]
+FetalW9_mac_phe[,2] <- "9"
+colnames(FetalW9_mac_phe) <- c("ID", "Week")
+
+FetalW10_mac_phe <- t(FetalW10_mac_expr)
+FetalW10_mac_phe <- as.data.frame(FetalW10_mac_phe)
+FetalW10_mac_phe <- rownames_to_column(FetalW10_mac_phe)
+FetalW10_mac_phe <- FetalW10_mac_phe[,1:2]
+FetalW10_mac_phe[,2] <- "10"
+colnames(FetalW10_mac_phe) <- c("ID", "Week")
+
+# Making a dataframe with cell IDs and PCW # for macrophages from all timepoints
+Fetal_mac_phe <- rbind(FetalW7_mac_phe, FetalW8_mac_phe,
+                      FetalW9_mac_phe, FetalW10_mac_phe)
+colnames(Fetal_mac_phe) <- NULL
+Fetal_mac_phe <- as.matrix(Fetal_mac_phe)
+
+Fetal_mac_cytoTRACE_scores <- Fetal_mac_CytoTRACE$CytoTRACE # Extracting CytoTRACE scores
+
+# Combine the dataframes to assign CytoTRACE scores to the PCW # by cell IDs
+Fetal_mac_CytoP <- cbind(CytoTRACE = Fetal_mac_cytoTRACE_scores, Fetal_mac_phe)
+rownames(Fetal_mac_CytoP) <- NULL
+colnames(Fetal_mac_CytoP) <- c("CytoTRACE_Score", "ID", "Week")
+Fetal_mac_Plot <- Fetal_mac_CytoP[,c(1,3)] # Taking only the columns of the CytoTRACE scores and PCW
+Fetal_mac_Plot <- as.data.frame(Fetal_mac_Plot)
+Fetal_mac_Plot$CytoTRACE_Score <- as.numeric(Fetal_mac_Plot$CytoTRACE_Score)
+Fetal_mac_Plot$Week <- factor(Fetal_mac_Plot$Week, levels = c("7","8","9","10"))
+
+group_colors <- c("7" = "darkred", "8" = "coral", "9" = "darkseagreen", "10" = "cornflowerblue")
+
+# Plotting the CytoTRACE scores for macrophages from each PCW as a boxplot
+ggplot(Fetal_mac_Plot, aes(x = Week, y = CytoTRACE_Score, fill = Week)) +
+  geom_boxplot(alpha = 0.7, size = 0.3) +
+  scale_fill_manual(values = group_colors) + 
+  scale_color_manual(values = group_colors) +
+  labs(title = "Differentiation status by PCW",
+       x = "PCW",
+       y = "Predicted ordering by CytoTRACE") + 
+  theme(legend.position = "none") +
+  theme_minimal() +
+  NoLegend()
+```
+
+```{r}
+#Plotting S100A12 as a gene of interest with CytoTRACE scores
+
+#extract CytoTRACE scores calculated for each gene 
+FetalW9_mac_cytoTRACE_scores_genes <- FW9_Cyto$exprMatrix
+testgenename <- "S100A12"
+
+#extract expression of gene of interest from the CytoTRACE scores matrix
+testgene2 <- FetalW9_mac_cytoTRACE_scores_genes[testgenename, ]
+
+#combine UMAP coordinates with gene expression data into a dataframe
+FetalW9_mac_umap_data_genetest2 <- cbind(FetalW9_mac_umap_coords, S100A12 = testgene2)
+
+
+#plot with gene expression as color
+ggplot(FetalW9_mac_umap_data_genetest2, aes(x = UMAP1, y = UMAP2, color = S100A12)) +
+  geom_point(size = 0.5) +
+  scale_color_gradient(name = "Gene Expression", low = "pink", high = "blue", labels = labels) +
+  ggtitle("Week 9 macrophages") +
+  theme_minimal()
+```
+
